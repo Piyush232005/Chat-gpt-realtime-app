@@ -68,6 +68,7 @@ Open your browser:
 Navigate to http://localhost:3000 to view the application.
 
 📁 Project Structure
+
 your-repo-name/
 ├── .env.local             # Environment variables
 ├── node_modules/          # Project dependencies
