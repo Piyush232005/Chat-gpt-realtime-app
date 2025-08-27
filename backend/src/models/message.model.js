@@ -15,8 +15,14 @@ const messageSchema = new mongoose.Schema({
     },
     role:{
         type: String,
-        enum: ['user', 'ai'],
+        enum: ['user', 'model','system'],
         required: true
     }
+}, {
+    timestamps: true
+});
 
-})
+const messageModel = mongoose.model('message', messageSchema);
+
+// This is the line that was missing!
+module.exports = messageModel;

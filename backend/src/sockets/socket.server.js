@@ -3,7 +3,7 @@ const cookie = require('cookie');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/user.model');
 const aiService = require("../services/ai.service");
-const { Chat } = require("@google/genai");
+const messageModel = require("../models/message.model");
 
 function initSocketServer(httpServer) {
 
@@ -40,7 +40,21 @@ function initSocketServer(httpServer) {
 
             console.log("Received AI message:", messagePayload);
 
+            await messageModel.create({
+                chat: messagePayload.chat,
+                user: socket.user._id,
+                content: messagePayload.content,
+                role: 'user'
+            })
+
             const response = await aiService.generateResponse(messagePayload.content);
+
+            await messageModel.create({
+                content: response,
+                chat: messagePayload.chat,
+                user: socket.user._id,
+                role: 'model'
+            })
 
             socket.emit("ai-response", {
                 content: response,
