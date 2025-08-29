@@ -34,54 +34,99 @@ function initSocketServer(httpServer) {
     })
 
 
-    io.on('connection', (socket) => {
-
+    io.on("connection", (socket) => {
         socket.on("ai-message", async (messagePayload) => {
+            /* messagePayload = { chat:chatId,content:message text } */
+            const [message, vectors] = await Promise.all([
+                messageModel.create({
+                    chat: messagePayload.chat,
+                    user: socket.user._id,
+                    content: messagePayload.content,
+                    role: "user"
+                }),
+                aiService.generateVector(messagePayload.content),
+            ])
 
-            // messagePayload = {content: "Hello, how are you?", chat: "chatId123"} // Example payload structure
-
-            console.log("Received AI message:", messagePayload);
-
-            // await messageModel.create({
-            //     chat: messagePayload.chat,
-            //     user: socket.user._id,
-            //     content: messagePayload.content,
-            //     role: 'user'
-            // })
-
-            const vectors = await aiService.generateVector(messagePayload.content);
-
-            console.log("Generated vectors:", vectors);
-            
-
-            const chatHistory = (await messageModel.find({
-                chat: messagePayload.chat
-            }).sort({ created: -1 }).limit(20).lean()).reverse();
+            await createMemory({
+                vectors,
+                messageId: message._id,
+                metadata: {
+                    chat: messagePayload.chat,
+                    user: socket.user._id,
+                    text: messagePayload.content
+                }
+            })
 
 
-            const response = await aiService.generateResponse(chatHistory.map(item => {
+            const [memory, chatHistory] = await Promise.all([
+
+                queryMemory({
+                    queryVector: vectors,
+                    limit: 3,
+                    metadata: {
+                        user: socket.user._id
+                    }
+                }),
+
+                messageModel.find({
+                    chat: messagePayload.chat
+                }).sort({ createdAt: -1 }).limit(20).lean().then(messages => messages.reverse())
+            ])
+
+            const stm = chatHistory.map(item => {
                 return {
                     role: item.role,
-                    parts: [{
-                        text: item.content
-                    }]
+                    parts: [{ text: item.content }]
                 }
-            }));
+            })
+
+            const ltm = [
+                {
+                    role: "user",
+                    parts: [{
+                        text: `
+
+                        these are some previous messages from the chat, use them to generate a response
+
+                        ${memory.map(item => item.metadata.text).join("\n")}
+                        
+                    ` }]
+                }
+            ]
 
 
-            // await messageModel.create({
-            //     content: response,
-            //     chat: messagePayload.chat,
-            //     user: socket.user._id,
-            //     role: 'model'
-            // })
+            const response = await aiService.generateResponse([...ltm, ...stm])
 
-            socket.emit("ai-response", {
+
+
+
+            socket.emit('ai-response', {
                 content: response,
                 chat: messagePayload.chat
-            });
+            })
+
+            const [responseMessage, responseVectors] = await Promise.all([
+                messageModel.create({
+                    chat: messagePayload.chat,
+                    user: socket.user._id,
+                    content: response,
+                    role: "model"
+                }),
+                aiService.generateVector(response)
+            ])
+
+            await createMemory({
+                vectors: responseVectors,
+                messageId: responseMessage._id,
+                metadata: {
+                    chat: messagePayload.chat,
+                    user: socket.user._id,
+                    text: response
+                }
+            })
 
         })
+
     })
 }
 
