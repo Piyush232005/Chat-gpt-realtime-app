@@ -35,8 +35,11 @@ function initSocketServer(httpServer) {
 
 
     io.on("connection", (socket) => {
+
         socket.on("ai-message", async (messagePayload) => {
             /* messagePayload = { chat:chatId,content:message text } */
+
+            // Save user message in database  and generate its vector
             const [message, vectors] = await Promise.all([
                 messageModel.create({
                     chat: messagePayload.chat,
@@ -58,6 +61,8 @@ function initSocketServer(httpServer) {
             })
 
 
+            // Retrieve relevant memories and chat history
+
             const [memory, chatHistory] = await Promise.all([
 
                 queryMemory({
@@ -73,6 +78,9 @@ function initSocketServer(httpServer) {
                 }).sort({ createdAt: -1 }).limit(20).lean().then(messages => messages.reverse())
             ])
 
+
+            // Generate AI response
+            // Prepare messages for AI service
             const stm = chatHistory.map(item => {
                 return {
                     role: item.role,
@@ -80,6 +88,7 @@ function initSocketServer(httpServer) {
                 }
             })
 
+            // Add system prompt at the beginning
             const ltm = [
                 {
                     role: "user",
@@ -96,8 +105,6 @@ function initSocketServer(httpServer) {
 
 
             const response = await aiService.generateResponse([...ltm, ...stm])
-
-
 
 
             socket.emit('ai-response', {
