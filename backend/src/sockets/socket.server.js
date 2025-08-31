@@ -34,6 +34,8 @@ function initSocketServer(httpServer) {
     })
 
 
+    // Handle socket connections
+
     io.on("connection", (socket) => {
 
         socket.on("ai-message", async (messagePayload) => {
@@ -43,13 +45,13 @@ function initSocketServer(httpServer) {
             const [message, vectors] = await Promise.all([
                 messageModel.create({
                     chat: messagePayload.chat,
-                    user: socket.user._id,
+                    user: socket.user._id, 
                     content: messagePayload.content,
                     role: "user"
                 }),
                 aiService.generateVector(messagePayload.content),
             ])
-
+// Save the message vector in the vector database
             await createMemory({
                 vectors,
                 messageId: message._id,
